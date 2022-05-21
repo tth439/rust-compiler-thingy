@@ -1,0 +1,15 @@
+[package]
+name = "compiler"
+version = "0.1.0"
+authors = ["tth439"]
+edition = "2021"
+
+[lib]
+name = "compiler"
+path = "src/compiler/lib.rs"
+
+[dependencies]
+nom = "7.1.0"
+clap = "2.33.3"
+ptree = "0.3.2"
+thiserror = "1.0"

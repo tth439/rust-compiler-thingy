@@ -1,0 +1,8 @@
+
+let x
+
+while (x > 1) {
+    let y = x + 1
+    print(y)
+    x = x - 1
+}

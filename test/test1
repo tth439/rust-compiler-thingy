@@ -1,0 +1,6 @@
+let x = (1 + 3) * (4)
+let y = "foo"
+
+
+print(x)
+print(y)
