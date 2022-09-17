@@ -1,7 +1,7 @@
 extern crate ptree;
 use clap::{App, Arg};
-use compiler::parser::ast::AST;
-use compiler::parser::parser_entrypoint;
+use parser::ast::AST;
+use parser::parser_entrypoint;
 use nom::error::Error;
 use ptree::{print_tree, TreeBuilder};
 use std::fs;

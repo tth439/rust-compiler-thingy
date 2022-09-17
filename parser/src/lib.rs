@@ -2,8 +2,8 @@ pub mod ast;
 pub(crate) mod expression;
 pub(crate) mod instruction;
 pub(crate) mod literal;
-use super::parser::ast::Stmt;
-use super::parser::instruction::program;
+use self::{ast::Stmt, instruction::program};
+
 use nom::{
     combinator::map,
     error::{FromExternalError, ParseError},

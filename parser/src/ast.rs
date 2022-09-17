@@ -3,6 +3,7 @@ use ptree::TreeBuilder;
 use std::borrow::Cow;
 use std::fmt::Debug;
 use thiserror::Error;
+
 #[derive(Error, Debug)]
 pub enum CompilerError {
     #[error("division by zero")]
