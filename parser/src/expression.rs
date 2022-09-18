@@ -87,7 +87,6 @@ where
         pair(alt((tag("<="), tag(">="), tag("<"), tag(">"), tag("="))), term),
         move || prod.clone(),
         |acc, (op, e)| {
-            println!("hereeee {}", op);
             return Expr::OrderExpr(OrderType::from(op), Box::new(acc), Box::new(e))
         },
     )(cons)

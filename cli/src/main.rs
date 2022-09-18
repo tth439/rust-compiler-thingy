@@ -1,7 +1,6 @@
 extern crate ptree;
 use clap::{App, Arg};
-use parser::ast::AST;
-use parser::parser_entrypoint;
+use parser::{parser_entrypoint, print_ast};
 use nom::error::Error;
 use ptree::{print_tree, TreeBuilder};
 use std::fs;
@@ -39,14 +38,11 @@ fn main() {
         println!("input file provided: {}", input_file);
         let mut contents =
             fs::read_to_string(input_file).expect("Something went wrong reading the file");
-        let res = parser_entrypoint::<Error<&str>>(contents.as_str());
+        let mut res = parser_entrypoint::<Error<&str>>(contents.as_str());
         match res {
-            Ok((_, node)) => {
+            Ok((_, ref mut node)) => {
                 if verbose {
-                    let mut tree = TreeBuilder::new(input_file.to_string());
-                    node.print_node(&mut tree);
-                    let tree = tree.build();
-                    print_tree(&tree).expect("Error printing tree");
+                    print_ast(input_file.to_string(), node.as_mut());
                 }
             }
             Err(reason) => eprintln!("Compilation error: {}", reason),
