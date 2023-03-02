@@ -15,33 +15,14 @@ pub enum CompilerError {
 pub type VResult = Result<(), Box<CompilerError>>;
 
 pub trait Visitor {
-    fn start_literal(&mut self, _t: &mut Literal) -> VResult {
-        Ok(())
-    }
-    
-    fn start_stmt(&mut self, _t: &mut Stmt) -> VResult {
-        Ok(())
-    }
+    fn visit_literal(&mut self, literal: &Literal);
+    fn visit_expr(&mut self, expr: &Expr);
+    fn visit_stmt(&mut self, stmt: &Stmt);
+    fn visit_declaration(&mut self, decl: &Declaration);
+}
 
-    fn post_stmt(&mut self, _t: &mut Stmt) -> VResult {
-        Ok(())
-    }
-
-    fn start_expr(&mut self, _t: &mut Expr) -> VResult {
-        Ok(())
-    }
-
-    fn post_expr(&mut self, _t: &mut Expr) -> VResult {
-        Ok(())
-    }
-
-    fn start_decl(&mut self, _t: &mut Declaration) -> VResult {
-        Ok(())
-    }
-
-    fn post_decl(&mut self, _t: &mut Declaration) -> VResult {
-        Ok(())
-    }
+pub trait Visitable {
+    fn accept(&mut self, v: &mut dyn Visitor);
 }
 
 pub struct PrintVisitor {
@@ -56,7 +37,7 @@ impl PrintVisitor {
 }
 
 impl Visitor for PrintVisitor {
-    fn start_literal(&mut self, literal: &mut Literal) -> VResult {
+    fn visit_literal(&mut self, literal: &mut Literal) {
         use Literal::*;
         match &literal {
             NumLiteral(i) => {
@@ -69,50 +50,55 @@ impl Visitor for PrintVisitor {
                 self.root.add_empty_child(format!("BOOLEAN LITERAL: \x1b[32m{}\x1b[0m", &b));
             }
         }
-        Ok(())
     }
     
-    fn start_stmt(&mut self, stmt: &mut Stmt) -> VResult {
+    fn visit_stmt(&mut self, stmt: &mut Stmt) {
         use Stmt::*;
         match &stmt {
-            Block(_) => {
+            Block(decl_list) => {
                 self.root.begin_child("BLOCK".to_string());
+                for s in decl_list.iter() {
+                    s.accept(self);
+                }
+                self.root.end_child();
             },
-            While(_, _) => {
+            While(n1, n2) => {
                 self.root.begin_child("WHILE".to_string());
+                n1.accept(self);
+                n2.accept(self);
+                self.root.end_child();
             },
-            Print(_) => {
+            Print(n) => {
                 self.root.begin_child("PRINT".to_string());
+                n.accept(self);
+                self.root.end_child();
             },
-            Call(name, _) => {
+            Call(name, params) => {
                 self.root.begin_child(format!(
                     "\x1b[34FUNCTION CALL\x1b[0m: \x1b[32{}\x1b[0m",
                     name
                 ));
+                self.root.end_child();
             },
-            ExprStmt(_) => {
+            ExprStmt(expr) => {
                 self.root.begin_child("Expression Statement".to_string());
+                expr.accept(self);
+                self.root.end_child();
             }
             Empty => {}
         }
-        Ok(())
     }
 
-    fn post_stmt(&mut self, _t: &mut Stmt) -> VResult {
-        self.root.end_child();
-        Ok(())
-    }
-
-    fn start_expr(&mut self, expr: &mut Expr) -> VResult {
+    fn start_expr(&mut self, expr: &mut Expr) {
         use Expr::*;
 
         match &expr {
-            ExprLiteral(_) => {},
+            ExprLiteral(i) => i.accept(self),
             Id(s) => {
                 self.root.add_empty_child(format!("IDENTIFIER: \x1b[32m{}\x1b[0m", s));
             }
 
-            OpExpr(op, _, _) => {
+            OpExpr(op, x, y) => {
                 let key = match op {
                     OpType::Add => String::from("+"), 
                     OpType::Mul => String::from("*"),
@@ -121,9 +107,12 @@ impl Visitor for PrintVisitor {
                     OpType::Mod => String::from("%"),
                 };
                 self.root.begin_child(key);
+                x.accept(self);
+                y.accept(self);
+                self.root.end_child();
             }
 
-            OrderExpr(op, _, _) => {
+            OrderExpr(op, x, y) => {
                 let key = match op {
                     OrderType::Less => String::from("<"),
                     OrderType::LessOrEqual => String::from("<="),
@@ -135,59 +124,56 @@ impl Visitor for PrintVisitor {
                     OrderType::Or => String::from("or"),
                 };
                 self.root.begin_child(key);
+                x.accept(self);
+                y.accept(self);
+                self.root.end_child();
             }
 
-            Assign(_, _) => {
+            Assign(n1, n2) => {
                 self.root.begin_child("ASSIGN".to_string());
+                n1.accept(self);
+                n2.accept(self);
+                self.root.end_child();
             },
 
-            UnaryExpr(op, _) => {
+            UnaryExpr(op, n) => {
                 let key = match op {
                     UnaryType::Not => String::from("Not"),
                     UnaryType::Negative => String::from("-"),
                 };
                 self.root.begin_child(key);
+                n.accept(self);
+                self.root.end_child();
             }
         }
-        Ok(())
     }
 
-    fn post_expr(&mut self, expr: &mut Expr) -> VResult {
-        use Expr::*;
-        match &expr {
-            ExprLiteral(_) => (),
-            Id(_) => (),
-            OpExpr(_, _, _) => {self.root.end_child();},
-            OrderExpr(_, _, _) => {self.root.end_child();}
-            Assign(_, _) => {self.root.end_child();}
-            UnaryExpr(_, _) => {self.root.end_child();}
-        }
-        Ok(())
-    }
-
-    fn start_decl(&mut self, decl: &mut Declaration) -> VResult {
+    fn start_decl(&mut self, decl: &mut Declaration) {
         use Declaration::*;
         match &decl {
-            FuncDecl(name, params, _) => {
+            FuncDecl(name, params, stmt) => {
                 self.root.begin_child(format!(
                     "\x1b[34FUNCTION DECL\x1b[0m: \x1b[32{}\x1b[0m, \x1b[34PARAMS\x1b[0m: \x1b[32{:?}\x1b[0m",
                     name, params
                 ));
+                stmt.accept(self);
+                self.root.end_child();
             },
-            VarDecl(_, _) => {self.root.begin_child("VAR DECL".to_string());},
-            Statement(_) => {self.root.begin_child("STMT DECL".to_string());},
+            VarDecl(id, exp) => {
+                self.root.begin_child("VAR DECL".to_string());
+                id.accept(self);
+                if let Some(e) = exp {
+                    e.accept(self);
+                }
+                self.root.end_child();
+            },
+            Statement(stmt) => {
+                self.root.begin_child("STMT DECL".to_string());
+                stmt.accept(self);
+                self.root.end_child();
+            },
         }
-        Ok(())
     }
-
-    fn post_decl(&mut self, _t: &mut Declaration) -> VResult {
-        self.root.end_child();
-        Ok(())
-    }
-}
-
-pub trait Visitable {
-    fn visit(&mut self, v: &mut dyn Visitor) -> VResult;
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -241,7 +227,7 @@ pub enum Literal<'a> {
 }
 
 impl<'a> Visitable for Literal<'a> {
-    fn visit(&mut self, v: &mut dyn Visitor) -> VResult {
+    fn accept(&mut self, v: &mut dyn Visitor) {
         v.start_literal(self)
     }
 }
@@ -257,31 +243,8 @@ pub enum Expr<'a> {
 }
 
 impl<'a> Visitable for Expr<'a> {
-    fn visit(&mut self, v: &mut dyn Visitor) -> VResult {
-        use Expr::*;
-        v.start_expr(self)?;
-
-        match self {
-            ExprLiteral(i) => i.visit(v)?,
-            Id(_) => {},
-            OpExpr(_, x, y) => {
-                x.visit(v)?;
-                y.visit(v)?;
-            }
-
-            OrderExpr(_, x, y) => {
-                x.visit(v)?;
-                y.visit(v)?;
-            }
-
-            Assign(n1, n2) => {
-                n1.visit(v)?;
-                n2.visit(v)?;
-            },
-
-            UnaryExpr(_, n) => n.visit(v)?,
-        }
-        v.post_expr(self)    
+    fn accept(&mut self, v: &mut dyn Visitor) {
+        v.visit_expr(self)?;
     }
 }
 
@@ -296,32 +259,8 @@ pub enum Stmt<'a> {
 }
 
 impl<'a> Visitable for Stmt<'a> {
-    fn visit(&mut self, v: &mut dyn Visitor) -> VResult {
-        use Stmt::*;
-        v.start_stmt(self)?;
-        match self {
-            Block(decl_list) => {
-                for s in decl_list {
-                    s.visit(v)?;
-                }
-            }
-
-            While(n1, n2) => {
-                n1.visit(v)?;
-                n2.visit(v)?;
-            }
-
-            Print(n) => n.visit(v)?,
-            Call(_, params) => { 
-                for s in params {
-                    s.visit(v)?;
-                }
-            },
-
-            ExprStmt(expr) => expr.visit(v)?,
-            Empty => ()
-        }
-        v.post_stmt(self)
+    fn accept(&mut self, v: &mut dyn Visitor) {
+        v.visit_stmt(self);
     }
 }
 
@@ -333,20 +272,7 @@ pub enum Declaration<'a> {
 }
 
 impl<'a> Visitable for Declaration<'a> {
-    fn visit(&mut self, v: &mut dyn Visitor) -> VResult {
-        use Declaration::*;
-        v.start_decl(self)?;
-
-        match self {
-            FuncDecl(_, _, stmt) => stmt.visit(v)?,
-            VarDecl(id, exp) => {
-                id.visit(v)?;
-                if let Some(e) = exp {
-                    e.visit(v)?;   
-                }
-            },
-            Statement(stmt) => stmt.visit(v)?,
-        }
-        v.post_decl(self)
+    fn accept(&mut self, v: &mut dyn Visitor) {
+        v.visit_decl(self);
     }
 }

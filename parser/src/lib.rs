@@ -21,7 +21,7 @@ where
 
 pub fn print_ast(input_file: String, tree: &mut Stmt) {
     let mut printer = PrintVisitor::new(input_file);
-    let _ = tree.visit(&mut printer);
+    tree.accept(&mut printer);
     let output_tree = printer.root.build();
     print_tree(&output_tree).expect("Error printing tree");
 }
