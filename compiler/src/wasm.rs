@@ -2,8 +2,6 @@
 // use walrus::{FunctionBuilder, Module, ModuleConfig, ValType};
 // use parser::ast::{Stmt, Declaration, Expr, OpType, OrderType};
 
-
-
 // // #[derive(PartialEq, Debug, Clone)]
 // // pub enum Declaration<'a> {
 // //     FuncDecl(Cow<'a, str>, Vec<&'a str>, Box<Stmt<'a>>),
@@ -58,6 +56,5 @@
 //         }
 //         return output;
 //     }
-
 
 // }

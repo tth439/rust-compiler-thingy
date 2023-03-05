@@ -1,217 +1,237 @@
-use super::literal::{parse_identifier, parse_number, parse_bool};
-use super::ast::{Expr, OpType, OrderType, UnaryType, Literal};
-use std::borrow::Cow;
-use nom::{
-    branch::alt,
-    sequence::{delimited, separated_pair, pair},
-    bytes::complete::tag,
-    character::complete::{char, space0},
-    combinator::map,
-    error::{FromExternalError, ParseError},
-    multi::fold_many0,
-    IResult,
-};
+use super::ast::{Expr, Literal, OpType, OrderType, UnaryType};
 use super::literal::parse_string;
+use super::literal::{parse_bool, parse_identifier, parse_number};
+use nom::{
+  branch::alt,
+  bytes::complete::tag,
+  character::complete::{char, space0},
+  combinator::map,
+  error::{FromExternalError, ParseError},
+  multi::fold_many0,
+  sequence::{delimited, pair, separated_pair},
+  IResult,
+};
+use std::borrow::Cow;
 use std::num::ParseFloatError;
 
 pub(crate) fn logic_or<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
 where
-    E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    let (cons, prod) = logic_and(input)?;
-    fold_many0(
-        pair(tag("or"), logic_and),
-        move || prod.clone(),
-        |acc, (op, e)| match op {
-           "or" => Expr::OrderExpr(OrderType::Or, Box::new(acc), Box::new(e)),
-            _  => panic!("error, unable to parse operator"),  
-        }
-    )(cons)
+  let (cons, prod) = logic_and(input)?;
+  fold_many0(
+    pair(tag("or"), logic_and),
+    move || prod.clone(),
+    |acc, (op, e)| match op {
+      "or" => Expr::OrderExpr(OrderType::Or, Box::new(acc), Box::new(e)),
+      _ => panic!("error, unable to parse operator"),
+    },
+  )(cons)
 }
 
 pub(crate) fn logic_and<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
 where
-    E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    let (cons, prod) = equality(input)?;
-    fold_many0(
-        pair(tag("and"), equality),
-        move || prod.clone(),
-        |acc, (op, e)| match op {
-           "and" => Expr::OrderExpr(OrderType::And, Box::new(acc), Box::new(e)),
-            _  => panic!("error, unable to parse operator"),  
-        }
-    )(cons)
+  let (cons, prod) = equality(input)?;
+  fold_many0(
+    pair(tag("and"), equality),
+    move || prod.clone(),
+    |acc, (op, e)| match op {
+      "and" => Expr::OrderExpr(OrderType::And, Box::new(acc), Box::new(e)),
+      _ => panic!("error, unable to parse operator"),
+    },
+  )(cons)
 }
 
 pub(crate) fn assignment<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
 where
-    E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    alt((
-        map(
-            separated_pair(
-                parse_identifier,
-                delimited(space0, char('='), space0),
-                assignment,
-            ),
-            move |(id, exp)|
-                return Expr::Assign(Box::new(Expr::Id(Cow::Borrowed(id))), Box::new(exp))
-        ),
-        logic_or
-    ))(input)
+  alt((
+    map(
+      separated_pair(
+        parse_identifier,
+        delimited(space0, char('='), space0),
+        assignment,
+      ),
+      move |(id, exp)| return Expr::Assign(Box::new(Expr::Id(Cow::Borrowed(id))), Box::new(exp)),
+    ),
+    logic_or,
+  ))(input)
 }
 
 pub(crate) fn equality<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
 where
-    E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    let (cons, prod) = comparison(input)?;
-    fold_many0(
-        pair(equality_operator, comparison),
-        move || prod.clone(),
-        |acc, (op, e)| match op {
-           "==" => Expr::OrderExpr(OrderType::Equal, Box::new(acc), Box::new(e)),
-           "!=" => Expr::OrderExpr(OrderType::Unequal, Box::new(acc), Box::new(e)),
-            _  => panic!("error, unable to parse operator"),  
-        }
-    )(cons)
+  let (cons, prod) = comparison(input)?;
+  fold_many0(
+    pair(equality_operator, comparison),
+    move || prod.clone(),
+    |acc, (op, e)| match op {
+      "==" => Expr::OrderExpr(OrderType::Equal, Box::new(acc), Box::new(e)),
+      "!=" => Expr::OrderExpr(OrderType::Unequal, Box::new(acc), Box::new(e)),
+      _ => panic!("error, unable to parse operator"),
+    },
+  )(cons)
 }
 
 pub(crate) fn comparison<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
 where
-    E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    let (cons, prod) = term(input)?;
-    fold_many0(
-        pair(alt((tag("<="), tag(">="), tag("<"), tag(">"), tag("="))), term),
-        move || prod.clone(),
-        |acc, (op, e)| {
-            return Expr::OrderExpr(OrderType::from(op), Box::new(acc), Box::new(e))
-        },
-    )(cons)
+  let (cons, prod) = term(input)?;
+  fold_many0(
+    pair(
+      alt((tag("<="), tag(">="), tag("<"), tag(">"), tag("="))),
+      term,
+    ),
+    move || prod.clone(),
+    |acc, (op, e)| return Expr::OrderExpr(OrderType::from(op), Box::new(acc), Box::new(e)),
+  )(cons)
 }
 
 fn parens<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
-where E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>
+where
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    delimited(tag("("), 
-        delimited(space0, expr, space0),
-    tag(")"))(input)
+  delimited(tag("("), delimited(space0, expr, space0), tag(")"))(input)
 }
 
-pub(crate) fn primary<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E> 
-    where E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>
+pub(crate) fn primary<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
+where
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    alt((
-        map(delimited(space0, parse_identifier, space0), 
-            |id: &str| Expr::Id(Cow::Borrowed(id))),
-        map(delimited(space0, parse_number, space0), 
-            |num: Literal| Expr::ExprLiteral(num)),
-        map(delimited(space0, parse_bool, space0),
-            |boolean: Literal| Expr::ExprLiteral(boolean)),
-        delimited(space0, parse_string, space0),
-        delimited(space0, parens, space0), 
-    ))(input)
+  alt((
+    map(delimited(space0, parse_identifier, space0), |id: &str| {
+      Expr::Id(Cow::Borrowed(id))
+    }),
+    map(delimited(space0, parse_number, space0), |num: Literal| {
+      Expr::ExprLiteral(num)
+    }),
+    map(delimited(space0, parse_bool, space0), |boolean: Literal| {
+      Expr::ExprLiteral(boolean)
+    }),
+    delimited(space0, parse_string, space0),
+    delimited(space0, parens, space0),
+  ))(input)
 }
 
 pub(crate) fn factor_operator<'i, E>(input: &'i str) -> IResult<&'i str, char, E>
-    where E: ParseError<&'i str>
+where
+  E: ParseError<&'i str>,
 {
-    alt((char('/'), char('*'), char('%')))(input)
+  alt((char('/'), char('*'), char('%')))(input)
 }
 
 pub(crate) fn term_operator<'i, E>(input: &'i str) -> IResult<&'i str, char, E>
-    where E: ParseError<&'i str>
+where
+  E: ParseError<&'i str>,
 {
-    alt((char('+'), char('-')))(input)
+  alt((char('+'), char('-')))(input)
 }
 
 pub(crate) fn unary_operator<'i, E>(input: &'i str) -> IResult<&'i str, char, E>
-    where E: ParseError<&'i str>
+where
+  E: ParseError<&'i str>,
 {
-    alt((char('!'), char('-')))(input)
+  alt((char('!'), char('-')))(input)
 }
 
 pub(crate) fn equality_operator<'i, E>(input: &'i str) -> IResult<&'i str, &'i str, E>
-    where E: ParseError<&'i str>
+where
+  E: ParseError<&'i str>,
 {
-    alt((tag("=="), tag("!=")))(input)
+  alt((tag("=="), tag("!=")))(input)
 }
 
 pub(crate) fn term<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
-    where E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>
+where
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    let (cons, prod) = factor(input)?;
-    fold_many0(
-        pair(term_operator, factor),
-        move || prod.clone(),
-        |acc, (op, e)| match op {
-           '+' => Expr::OpExpr(OpType::Add, Box::new(acc), Box::new(e)),
-           '-' => Expr::OpExpr(OpType::Sub, Box::new(acc), Box::new(e)),
-            _  => panic!("error, unable to parse operator"),  
-        }
-    )(cons)
+  let (cons, prod) = factor(input)?;
+  fold_many0(
+    pair(term_operator, factor),
+    move || prod.clone(),
+    |acc, (op, e)| match op {
+      '+' => Expr::OpExpr(OpType::Add, Box::new(acc), Box::new(e)),
+      '-' => Expr::OpExpr(OpType::Sub, Box::new(acc), Box::new(e)),
+      _ => panic!("error, unable to parse operator"),
+    },
+  )(cons)
 }
 
 pub(crate) fn factor<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
-    where E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>
+where
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    let (cons, prod) = unary(input)?;
-    fold_many0(
-        pair(factor_operator, unary),
-        move || prod.clone(),
-        |acc, (op, e)| match op {
-           '*' => Expr::OpExpr(OpType::Mul, Box::new(acc), Box::new(e)),
-           '/' => Expr::OpExpr(OpType::Div, Box::new(acc), Box::new(e)),
-           '%' => Expr::OpExpr(OpType::Mod, Box::new(acc), Box::new(e)),
-            _  => panic!("error, unable to parse operator"),  
-        }
-    )(cons)
+  let (cons, prod) = unary(input)?;
+  fold_many0(
+    pair(factor_operator, unary),
+    move || prod.clone(),
+    |acc, (op, e)| match op {
+      '*' => Expr::OpExpr(OpType::Mul, Box::new(acc), Box::new(e)),
+      '/' => Expr::OpExpr(OpType::Div, Box::new(acc), Box::new(e)),
+      '%' => Expr::OpExpr(OpType::Mod, Box::new(acc), Box::new(e)),
+      _ => panic!("error, unable to parse operator"),
+    },
+  )(cons)
 }
 
 pub(crate) fn unary<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
-    where E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>
+where
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    alt((
-        map(pair(unary_operator, primary),
-         |exp| {
-            match exp {
-                ('!', e) => Expr::UnaryExpr(UnaryType::Not, Box::new(e)),
-                ('-', e) => Expr::UnaryExpr(UnaryType::Negative, Box::new(e)),
-                _ => panic!("error, unable to parse operator"),
-            }
-         }),
-        primary
-    ))(input)
+  alt((
+    map(pair(unary_operator, primary), |exp| match exp {
+      ('!', e) => Expr::UnaryExpr(UnaryType::Not, Box::new(e)),
+      ('-', e) => Expr::UnaryExpr(UnaryType::Negative, Box::new(e)),
+      _ => panic!("error, unable to parse operator"),
+    }),
+    primary,
+  ))(input)
 }
 
 pub(crate) fn expr<'i, E>(input: &'i str) -> IResult<&'i str, Expr, E>
-    where E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>
+where
+  E: ParseError<&'i str> + FromExternalError<&'i str, ParseFloatError>,
 {
-    assignment(input)
+  assignment(input)
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use nom::error::Error;
+  use super::*;
+  use nom::error::Error;
 
-    #[test]
-    fn test_expr() {
-        let test1 = expr::<Error<&str>>(" (  2 )").unwrap();
-        let test2 = expr::<Error<&str>>(" ( 2 + 6 )").unwrap();
-        let test3 = expr::<Error<&str>>("( x >=6) ").unwrap();
-        assert_eq!(test1, ("", Expr::ExprLiteral(Literal::NumLiteral(2.0))));
-        assert_eq!(test2, ("", Expr::OpExpr(
-            OpType::Add, 
-            Box::new(Expr::ExprLiteral(Literal::NumLiteral(2.0))), 
-            Box::new(Expr::ExprLiteral(Literal::NumLiteral(6.0)))
-        )));
-        assert_eq!(test3, ("", Expr::OrderExpr(
-            OrderType::GreaterOrEqual,
-            Box::new(Expr::Id(Cow::Borrowed("x"))),
-            Box::new(Expr::ExprLiteral(Literal::NumLiteral(6.0))),
-        )));
-    }
+  #[test]
+  fn test_expr() {
+    let test1 = expr::<Error<&str>>(" (  2 )").unwrap();
+    let test2 = expr::<Error<&str>>(" ( 2 + 6 )").unwrap();
+    let test3 = expr::<Error<&str>>("( x >=6) ").unwrap();
+    assert_eq!(test1, ("", Expr::ExprLiteral(Literal::NumLiteral(2.0))));
+    assert_eq!(
+      test2,
+      (
+        "",
+        Expr::OpExpr(
+          OpType::Add,
+          Box::new(Expr::ExprLiteral(Literal::NumLiteral(2.0))),
+          Box::new(Expr::ExprLiteral(Literal::NumLiteral(6.0)))
+        )
+      )
+    );
+    assert_eq!(
+      test3,
+      (
+        "",
+        Expr::OrderExpr(
+          OrderType::GreaterOrEqual,
+          Box::new(Expr::Id(Cow::Borrowed("x"))),
+          Box::new(Expr::ExprLiteral(Literal::NumLiteral(6.0))),
+        )
+      )
+    );
+  }
 }
