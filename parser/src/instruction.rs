@@ -1,3 +1,5 @@
+use crate::ast::deduce_expr_type_offset;
+
 use super::ast::{Declaration, Expr, Literal, OpType, OrderType, Stmt};
 use super::expression::{expr, logic_or};
 use super::literal::parse_identifier;
@@ -59,8 +61,11 @@ where
     |(id, exp)| {
       let parsed_id = Box::new(Expr::Id(id.into()));
       match &exp {
-        Some((_, e)) => Declaration::VarDecl(parsed_id, Some(e.to_owned())),
-        None => Declaration::VarDecl(parsed_id, None),
+        Some((_, e)) => {
+          let offset = deduce_expr_type_offset(e);
+          Declaration::VarDecl(parsed_id, Some(e.to_owned()), offset)
+        }
+        None => Declaration::VarDecl(parsed_id, None, 0),
       }
     },
   )(input)

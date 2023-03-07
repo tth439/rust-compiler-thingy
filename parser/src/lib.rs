@@ -2,7 +2,7 @@ pub mod ast;
 pub(crate) mod expression;
 pub(crate) mod instruction;
 pub(crate) mod literal;
-use self::{ast::PrintVisitor, ast::Stmt, ast::VResult, ast::Visitable, instruction::program};
+use self::{ast::PrintVisitor, ast::Stmt, ast::Visitable, instruction::program};
 use ptree::print_tree;
 
 use nom::{

@@ -12,17 +12,15 @@ pub enum CompilerError {
   InvalidStatementError,
 }
 
-pub type VResult = Result<(), Box<CompilerError>>;
-
-pub trait Visitor {
-  fn visit_literal(&mut self, literal: &Literal);
-  fn visit_expr(&mut self, expr: &Expr);
-  fn visit_stmt(&mut self, stmt: &Stmt);
-  fn visit_declaration(&mut self, decl: &Declaration);
+pub trait Visitor<T> {
+  fn visit_literal(&mut self, literal: &Literal) -> Option<T>;
+  fn visit_expr(&mut self, expr: &Expr) -> Option<T>;
+  fn visit_stmt(&mut self, stmt: &Stmt) -> Option<T>;
+  fn visit_declaration(&mut self, decl: &Declaration) -> Option<T>;
 }
 
-pub trait Visitable {
-  fn accept(&self, v: &mut dyn Visitor);
+pub trait Visitable<T> {
+  fn accept(&self, v: &mut dyn Visitor<T>) -> Option<T>;
 }
 
 pub struct PrintVisitor {
@@ -36,8 +34,8 @@ impl PrintVisitor {
   }
 }
 
-impl Visitor for PrintVisitor {
-  fn visit_literal(&mut self, literal: &Literal) {
+impl Visitor<()> for PrintVisitor {
+  fn visit_literal(&mut self, literal: &Literal) -> Option<()> {
     use Literal::*;
     match &literal {
       NumLiteral(i) => {
@@ -56,9 +54,10 @@ impl Visitor for PrintVisitor {
           .add_empty_child(format!("BOOLEAN LITERAL: \x1b[32m{}\x1b[0m", &b));
       }
     }
+    return None;
   }
 
-  fn visit_stmt(&mut self, stmt: &Stmt) {
+  fn visit_stmt(&mut self, stmt: &Stmt) -> Option<()> {
     use Stmt::*;
     match &stmt {
       Block(decl_list) => {
@@ -93,13 +92,16 @@ impl Visitor for PrintVisitor {
       }
       Empty => {}
     }
+    return None;
   }
 
-  fn visit_expr(&mut self, expr: &Expr) {
+  fn visit_expr(&mut self, expr: &Expr) -> Option<()> {
     use Expr::*;
 
     match &expr {
-      ExprLiteral(i) => i.accept(self),
+      ExprLiteral(i) => {
+        i.accept(self);
+      }
       Id(s) => {
         self
           .root
@@ -137,9 +139,9 @@ impl Visitor for PrintVisitor {
         self.root.end_child();
       }
 
-      Assign(n1, n2) => {
+      Assign(id, n2) => {
         self.root.begin_child("ASSIGN".to_string());
-        n1.accept(self);
+        self.root.add_empty_child(id.to_string());
         n2.accept(self);
         self.root.end_child();
       }
@@ -154,9 +156,10 @@ impl Visitor for PrintVisitor {
         self.root.end_child();
       }
     }
+    return None;
   }
 
-  fn visit_declaration(&mut self, decl: &Declaration) {
+  fn visit_declaration(&mut self, decl: &Declaration) -> Option<()> {
     use Declaration::*;
     match &decl {
       FuncDecl(name, params, stmt) => {
@@ -167,7 +170,7 @@ impl Visitor for PrintVisitor {
         stmt.accept(self);
         self.root.end_child();
       }
-      VarDecl(id, exp) => {
+      VarDecl(id, exp, _) => {
         self.root.begin_child("VAR DECL".to_string());
         id.accept(self);
         if let Some(e) = exp {
@@ -181,6 +184,7 @@ impl Visitor for PrintVisitor {
         self.root.end_child();
       }
     }
+    return None;
   }
 }
 
@@ -234,8 +238,8 @@ pub enum Literal<'a> {
   BoolLiteral(bool),
 }
 
-impl<'a> Visitable for Literal<'a> {
-  fn accept(&self, v: &mut dyn Visitor) {
+impl<'a, T> Visitable<T> for Literal<'a> {
+  fn accept(&self, v: &mut dyn Visitor<T>) -> Option<T> {
     v.visit_literal(self)
   }
 }
@@ -246,13 +250,31 @@ pub enum Expr<'a> {
   Id(Cow<'a, str>),
   OpExpr(OpType, Box<Self>, Box<Self>),
   OrderExpr(OrderType, Box<Self>, Box<Self>),
-  Assign(Box<Self>, Box<Self>),
+  Assign(Cow<'a, str>, Box<Self>),
   UnaryExpr(UnaryType, Box<Self>),
 }
 
-impl<'a> Visitable for Expr<'a> {
-  fn accept(&self, v: &mut dyn Visitor) {
-    v.visit_expr(self);
+pub(crate) fn deduce_expr_type_offset(e: &Expr) -> usize {
+  use Expr::*;
+  use Literal::*;
+
+  let offset = match e {
+    ExprLiteral(NumLiteral(_)) => 32,
+    ExprLiteral(BoolLiteral(_)) => 4,
+    ExprLiteral(StringLiteral(s)) => s.len(),
+    Id(_) => 0,
+    OpExpr(_, _, _) => 32,
+    OrderExpr(_, _, _) => 4,
+    UnaryExpr(UnaryType::Negative, _) => 32,
+    UnaryExpr(UnaryType::Not, _) => 32,
+    _ => unreachable!(),
+  };
+  return offset;
+}
+
+impl<'a, T> Visitable<T> for Expr<'a> {
+  fn accept(&self, v: &mut dyn Visitor<T>) -> Option<T> {
+    v.visit_expr(self)
   }
 }
 
@@ -266,21 +288,21 @@ pub enum Stmt<'a> {
   ExprStmt(Expr<'a>),
 }
 
-impl<'a> Visitable for Stmt<'a> {
-  fn accept(&self, v: &mut dyn Visitor) {
-    v.visit_stmt(self);
+impl<'a, T> Visitable<T> for Stmt<'a> {
+  fn accept(&self, v: &mut dyn Visitor<T>) -> Option<T> {
+    v.visit_stmt(self)
   }
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Declaration<'a> {
   FuncDecl(Cow<'a, str>, Vec<&'a str>, Box<Stmt<'a>>),
-  VarDecl(Box<Expr<'a>>, Option<Expr<'a>>),
+  VarDecl(Box<Expr<'a>>, Option<Expr<'a>>, usize),
   Statement(Box<Stmt<'a>>),
 }
 
-impl<'a> Visitable for Declaration<'a> {
-  fn accept(&self, v: &mut dyn Visitor) {
-    v.visit_declaration(self);
+impl<'a, T> Visitable<T> for Declaration<'a> {
+  fn accept(&self, v: &mut dyn Visitor<T>) -> Option<T> {
+    v.visit_declaration(self)
   }
 }

@@ -55,7 +55,7 @@ where
         delimited(space0, char('='), space0),
         assignment,
       ),
-      move |(id, exp)| return Expr::Assign(Box::new(Expr::Id(Cow::Borrowed(id))), Box::new(exp)),
+      move |(id, exp)| return Expr::Assign(Cow::Borrowed(id), Box::new(exp)),
     ),
     logic_or,
   ))(input)
